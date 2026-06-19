@@ -1,3 +1,4 @@
+const { ObjectId } = require('mongodb');
 const express = require('express');
 const app = express();
 const cors = require('cors'); 
@@ -15,7 +16,6 @@ app.get('/', (req, res) => {
 
 const uri = process.env.BETTER_AUTH_URI;
 
-// MongoClient তৈরি
 const client = new MongoClient(uri, {
   serverApi: {
     version: ServerApiVersion.v1,
@@ -24,16 +24,18 @@ const client = new MongoClient(uri, {
   }
 });
 
+let promptCollection, itemCollection, orgCollection;
+
 async function run() {
   try {
-    // ডাটাবেজের সাথে কানেক্ট হওয়া
+    // ডাটাবেজের সাথে কানেক্ট হওয়া
     await client.connect();
 
     // 🎯 ডাটাবেজ এবং কালেকশন সেটআপ
     const database = client.db("prompt-hub"); 
-    const promptCollection = database.collection("prompts");       // প্রম্পট কালেকশন
-    const itemCollection = database.collection("items");           // 🔄 (আগের jobs) জেনারেক আইটেম কালেকশন
-    const orgCollection = database.collection("organizations");     // 🔄 (আগের companies) অর্গানাইজেশন কালেকশন
+    promptCollection = database.collection("prompts");       
+    itemCollection = database.collection("items");           
+    orgCollection = database.collection("organizations");     
 
     // ==========================================
     // 🚀 ১. প্রম্পট ড্যাশবোর্ডের API রাউটসমূহ
@@ -43,9 +45,12 @@ async function run() {
     app.post('/api/prompts/add', async (req, res) => {
       try {
         const promptData = req.body;
+        console.log("📥 Received Prompt Data on Backend:", promptData);
+
         if (!promptData.userId || !promptData.title || !promptData.content) {
           return res.status(400).send({ message: "Required fields are missing!" });
         }
+        
         const result = await promptCollection.insertOne(promptData);
         res.status(201).send(result);
       } catch (error) {
@@ -69,6 +74,29 @@ async function run() {
       }
     });
 
+    // প্রম্পটের কপি কাউন্ট ১ বাড়ানোর API
+    app.patch('/api/prompts/copy/:id', async (req, res) => {
+      try {
+        const id = req.params.id;
+        if (!ObjectId.isValid(id)) {
+          return res.status(400).send({ success: false, message: "Invalid ID format" });
+        }
+        const query = { _id: new ObjectId(id) };
+        const updateDoc = { $inc: { copyCount: 1 } };
+
+        const result = await promptCollection.updateOne(query, updateDoc);
+        
+        if (result.modifiedCount === 1) {
+          res.send({ success: true, message: "Copy count updated successfully!" });
+        } else {
+          res.status(404).send({ success: false, message: "Prompt not found" });
+        }
+      } catch (error) {
+        console.error("Error updating copy count:", error);
+        res.status(500).send({ message: "Internal Server Error" });
+      }
+    });
+
     // নির্দিষ্ট ইউজারের সব প্রম্পট খুঁজে বের করার API (My Prompts পেজের জন্য)
     app.get('/api/prompts/my-prompts', async (req, res) => {
       try {
@@ -86,12 +114,70 @@ async function run() {
       }
     });
 
+    // 🗑️ ১. প্রম্পট ডিলিট করার নিরাপদ API (DELETE)
+    app.delete('/api/prompts/delete/:id', async (req, res) => {
+      try {
+        const id = req.params.id;
+        if (!ObjectId.isValid(id)) {
+          return res.status(400).send({ success: false, message: "Invalid Prompt ID format" });
+        }
+
+        const query = { _id: new ObjectId(id) };
+        const result = await promptCollection.deleteOne(query);
+        
+        if (result.deletedCount === 1) {
+          res.send({ success: true, message: "Prompt deleted successfully!" });
+        } else {
+          res.status(404).send({ success: false, message: "Prompt not found" });
+        }
+      } catch (error) {
+        console.error("Error deleting prompt:", error);
+        res.status(500).send({ message: "Internal Server Error" });
+      }
+    });
+
+    // 📝 ২. প্রম্পট আপডেট করার নিরাপদ API (PUT)
+    app.put('/api/prompts/update/:id', async (req, res) => {
+      try {
+        const id = req.params.id;
+        const updatedData = req.body;
+
+        if (!ObjectId.isValid(id)) {
+          return res.status(400).send({ success: false, message: "Invalid Prompt ID format" });
+        }
+
+        const filter = { _id: new ObjectId(id) };
+        const updateFields = {};
+        
+        if (updatedData.title !== undefined) updateFields.title = updatedData.title;
+        if (updatedData.description !== undefined) updateFields.description = updatedData.description;
+        if (updatedData.content !== undefined) updateFields.content = updatedData.content;
+        if (updatedData.category !== undefined) updateFields.category = updatedData.category;
+        if (updatedData.aiTool !== undefined) updateFields.aiTool = updatedData.aiTool;
+        if (updatedData.tags !== undefined) updateFields.tags = updatedData.tags;
+        if (updatedData.difficulty !== undefined) updateFields.difficulty = updatedData.difficulty;
+        if (updatedData.visibility !== undefined) updateFields.visibility = updatedData.visibility;
+        
+        updateFields.status = "pending"; 
+
+        const updateDoc = { $set: updateFields };
+        const result = await promptCollection.updateOne(filter, updateDoc);
+        
+        if (result.matchedCount === 0) {
+          return res.status(404).send({ success: false, message: "Prompt not found" });
+        }
+        
+        res.send({ success: true, message: "Prompt updated successfully!", result });
+      } catch (error) {
+        console.error("Error updating prompt:", error);
+        res.status(500).send({ message: "Internal Server Error" });
+      }
+    });
 
     // ==================================================
-    // 📦 ২. জেনারেক আইটেম ও অর্গানাইজেশন API (আগের কোড - রিনেমড)
+    // 📦 ২. জেনারেক আইটেম ও অর্গানাইজেশন API
     // ==================================================
 
-    // নতুন আইটেম বা পোস্ট তৈরি করার API (আগের post job)
     app.post('/api/items', async (req, res) => {
       try {
         const item = req.body;
@@ -102,7 +188,6 @@ async function run() {
       }
     });
 
-    // নতুন অর্গানাইজেশন বা প্রোফাইল নাম সেভ করার API (আগের post company)
     app.post('/api/organization', async (req, res) => {
       try {
         const organization = req.body;
@@ -113,7 +198,6 @@ async function run() {
       }
     });
 
-    // ক্রিয়েটর বা রিক্রুটার আইডি দিয়ে নির্দিষ্ট অর্গানাইজেশন খোঁজার API (আগের get company - বাগ ফিক্সড)
     app.get('/api/my/organization', async (req, res) => {
       try {
         let query = {}; 
@@ -127,7 +211,6 @@ async function run() {
       }
     });
 
-    // নির্দিষ্ট অর্গানাইজেশনের আন্ডারে থাকা সব আইটেম খোঁজার API (আগের get jobs)
     app.get('/api/items', async (req, res) => {
       try {
         let query = {};
@@ -142,16 +225,18 @@ async function run() {
       }
     });
 
-
     // MongoDB কানেকশন চেক পিং
     await client.db("admin").command({ ping: 1 });
     console.log("Pinged your deployment. You successfully connected to MongoDB!");
+
   } catch (error) {
     console.error("Database connection error:", error);
   }
 }
+
 run().catch(console.dir);
 
+// 🎯 গ্লোবালি সার্ভার লিসেন শুরু (সবচেয়ে নিরাপদ নিয়ম)
 app.listen(port, () => {
   console.log(`Server is running smoothly on port ${port}`);
 });

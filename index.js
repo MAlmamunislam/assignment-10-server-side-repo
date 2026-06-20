@@ -24,18 +24,21 @@ const client = new MongoClient(uri, {
   },
 });
 
-let promptCollection, itemCollection, orgCollection;
+let promptCollection, itemCollection, orgCollection,premiumRecordsCollection, usersCollection;
 
 async function run() {
   try {
     await client.connect();
 
     const database = client.db("prompt-hub");
+    const userDb = client.db("PromptHub");  // তোমার স্ক্রিনশট অনুযায়ী ডাটাবেজের নাম
     promptCollection = database.collection("prompts");
     itemCollection = database.collection("items");
     orgCollection = database.collection("organizations");
     const reportCollection = database.collection("reports");
     const bookmarkCollection = database.collection("bookmarks");
+   usersCollection = userDb.collection("user");
+premiumRecordsCollection = database.collection("premium_records");
 
     // Bookmark Add API
     app.post("/api/bookmarks", async (req, res) => {
@@ -179,6 +182,47 @@ async function run() {
       }
     });
 
+
+
+
+    // ... আগের কোডগুলো যেমন আছে তেমনই থাকবে
+
+// primium user collection 
+app.patch("/api/users/upgrade-to-premium", async (req, res) => {
+  try {
+    const { email, name, image } = req.body; 
+
+    // ডাটাবেজের 'user' কালেকশনে এই ইমেইলটি খুঁজবে
+    const userResult = await usersCollection.updateOne(
+      { email: email }, 
+      { $set: { plan: "premium" } }
+    );
+
+    // টার্মিনালে চেক করার জন্য
+    console.log("Email searched:", email);
+    console.log("Matched Count:", userResult.matchedCount);
+
+    if (userResult.matchedCount === 0) {
+      // যদি 0 হয়, তার মানে ডাটাবেজে এই ইমেইলটা নেই
+      return res.status(404).send({ success: false, message: "User not found!" });
+    }
+
+    // প্রিমিয়াম রেকর্ড এন্ট্রি
+    await premiumRecordsCollection.insertOne({
+      email, 
+      name, 
+      image, 
+      purchaseDate: new Date()
+    });
+
+    res.send({ success: true, message: "Congrats! You are now a premium user." });
+  } catch (error) {
+    console.error("Backend Error:", error);
+    res.status(500).send({ success: false, message: "Server error" });
+  }
+});
+
+// ... এর পরের কোডগুলো (যেমন: Dashboard Stats API) আগের মতোই থাকবে
     
 
 

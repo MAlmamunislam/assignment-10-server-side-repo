@@ -127,24 +127,34 @@ async function run() {
 
     // My Bookmarks API
 
-    app.get("/api/bookmarks/my-bookmarks", async (req, res) => {
-      try {
-        const userId = req.query.userId;
+  app.get("/api/bookmarks/my-bookmarks", async (req, res) => {
+  try {
+    const userId = req.query.userId;
+    
+    // বুকমার্ক এবং প্রম্পট কালেকশন জয়েন করা
+    const bookmarks = await bookmarkCollection.aggregate([
+      { $match: { userId: userId } },
+      {
+        $addFields: {
+          promptObjId: { $toObjectId: "$promptId" } // string ID কে ObjectId তে রূপান্তর
+        }
+      },
+      {
+        $lookup: {
+          from: "prompts", // তোমার প্রম্পট কালেকশনের নাম
+          localField: "promptObjId",
+          foreignField: "_id",
+          as: "promptDetails"
+        }
+      },
+      { $unwind: "$promptDetails" }
+    ]).toArray();
 
-        const bookmarks = await bookmarkCollection
-          .find({
-            userId,
-          })
-          .toArray();
-
-        res.send(bookmarks);
-      } catch (error) {
-        res.status(500).send({
-          success: false,
-          message: "Internal Server Error",
-        });
-      }
-    });
+    res.send(bookmarks);
+  } catch (error) {
+    res.status(500).send({ message: "Error fetching bookmarks" });
+  }
+});
 
     // ইউজার যখন রিপোর্ট করবে
     app.post("/api/reports", async (req, res) => {
@@ -168,6 +178,69 @@ async function run() {
         res.status(500).send({ message: "Internal Server Error" });
       }
     });
+
+    
+
+
+// User Dashboard Stats API
+app.get("/api/users/stats/:userId", async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const userEmail = req.query.email;
+
+    // ১. কার্ডের জন্য ডাটা কুয়েরি
+    const myPrompts = await promptCollection.countDocuments({ userId });
+    const savedPrompts = await bookmarkCollection.countDocuments({ userId });
+
+    const copyResult = await promptCollection.aggregate([
+      { $match: { userId } },
+      { $group: { _id: null, total: { $sum: "$copyCount" } } }
+    ]).toArray();
+    const totalCopies = copyResult.length > 0 ? copyResult[0].total : 0;
+
+    const reviewsGiven = await promptCollection.countDocuments({ "reviews.email": userEmail });
+
+    const ratingResult = await promptCollection.aggregate([
+      { $match: { userId } },
+      { $group: { _id: null, avgRating: { $avg: "$rating" } } }
+    ]).toArray();
+    const avgRating = ratingResult.length > 0 ? ratingResult[0].avgRating : 0;
+
+    // ২. গ্রাফের জন্য রিয়েল ডাটা কুয়েরি
+    const activityData = await promptCollection.aggregate([
+      { $match: { userId: userId } },
+      { 
+        $group: { 
+          _id: { $month: "$createdAt" }, 
+          totalCopies: { $sum: "$copyCount" } 
+        } 
+      },
+      { $sort: { _id: 1 } }
+    ]).toArray();
+
+    // গ্রাফের জন্য ডাটা ফরম্যাট করা
+    const formattedData = activityData.map(item => ({
+      name: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][item._id - 1],
+      TotalCopies: item.totalCopies
+    }));
+
+    // ৩. সব ডাটা একসাথে পাঠানো
+    res.send({
+      myPrompts,
+      savedPrompts,
+      totalCopies,
+      reviewsGiven,
+      avgRating: avgRating.toFixed(1), // ফিক্সড রেটিং
+      activityData: formattedData
+    });
+  } catch (error) {
+    console.error("Stats Error:", error);
+    res.status(500).send({ message: "Error fetching stats" });
+  }
+});
+
+
+
 
     // অ্যাডমিন প্যানেলে রিপোর্টগুলো দেখার জন্য
     app.get("/api/admin/reports", async (req, res) => {

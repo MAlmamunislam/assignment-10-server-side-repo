@@ -188,6 +188,175 @@ app.get("/api/admin/stats", async (req, res) => {
 
 
 
+// admin counter 
+app.get("/api/admin/stats", async (req, res) => {
+  try {
+    const totalUsers = await usersCollection.countDocuments();
+
+    // সব ডাটা একসাথে ক্যালকুলেট করা
+    const stats = await promptCollection.aggregate([
+      {
+        $group: {
+          _id: null,
+          totalPrompts: { $sum: 1 },
+          totalCopies: { $sum: { $ifNull: ["$copyCount", 0] } },
+          totalReviews: { $sum: { $size: { $ifNull: ["$reviews", []] } } }
+        }
+      }
+    ]).toArray();
+
+    // দিন অনুযায়ী ডাটা (Daily Chart Data)
+    const dailyData = await promptCollection.aggregate([
+      {
+        $group: {
+          _id: { 
+            $dateToString: { format: "%Y-%m-%d", date: { $toDate: "$createdAt" } } 
+          },
+          copies: { $sum: { $ifNull: ["$copyCount", 0] } },
+          reviews: { $sum: { $size: { $ifNull: ["$reviews", []] } } }
+        }
+      },
+      { $sort: { _id: 1 } },
+      { $limit: 30 }
+    ]).toArray();
+
+    const data = stats.length > 0 ? stats[0] : { totalPrompts: 0, totalCopies: 0, totalReviews: 0 };
+
+    // খেয়াল করো, এখানে dailyData অবজেক্টটি পাঠিয়ে দিচ্ছি
+    res.send({
+      totalUsers,
+      totalPrompts: data.totalPrompts,
+      totalCopies: data.totalCopies,
+      totalReviews: data.totalReviews,
+      dailyData: dailyData // এই লাইনটি মাস্ট!
+    });
+  } catch (error) {
+    res.status(500).send({ message: "Error" });
+  }
+});
+
+
+// সব ইউজারদের দেখার জন্য
+app.get("/api/admin/users", async (req, res) => {
+  const users = await usersCollection.find().toArray();
+  res.send(users);
+});
+
+// রোল আপডেট করার জন্য
+app.patch("/api/admin/update-role/:id", async (req, res) => {
+  const id = req.params.id;
+  const { role } = req.body;
+  const result = await usersCollection.updateOne({ _id: new ObjectId(id) }, { $set: { role } });
+  res.send(result);
+});
+
+// ইউজার ডিলিট করার জন্য
+app.delete("/api/admin/delete-user/:id", async (req, res) => {
+  const id = req.params.id;
+  const result = await usersCollection.deleteOne({ _id: new ObjectId(id) });
+  res.send(result);
+});// সব ইউজারদের দেখার জন্য
+app.get("/api/admin/users", async (req, res) => {
+  const users = await usersCollection.find().toArray();
+  res.send(users);
+});
+
+// রোল আপডেট করার জন্য
+app.patch("/api/admin/update-role/:id", async (req, res) => {
+  const id = req.params.id;
+  const { role } = req.body;
+  const result = await usersCollection.updateOne({ _id: new ObjectId(id) }, { $set: { role } });
+  res.send(result);
+});
+
+// ইউজার ডিলিট করার জন্য
+app.delete("/api/admin/delete-user/:id", async (req, res) => {
+  const id = req.params.id;
+  const result = await usersCollection.deleteOne({ _id: new ObjectId(id) });
+  res.send(result);
+});
+
+
+
+
+
+
+// সব পেমেন্ট রেকর্ড দেখার জন্য (Admin)
+app.get("/api/admin/payments", async (req, res) => {
+  try {
+    // তোমার কালেকশনের নাম যদি premium_records হয়
+    const payments = await premiumRecordsCollection.find().sort({ purchaseDate: -1 }).toArray();
+    res.send(payments);
+  } catch (error) {
+    res.status(500).send({ message: "Error fetching payments" });
+  }
+});
+
+
+// report 
+
+app.patch("/api/admin/reports/:reportId", async (req, res) => {
+  const { action, promptId } = req.body;
+  const reportId = req.params.reportId;
+
+  try {
+    if (action === 'remove') {
+      // প্রম্পট কালেকশন থেকে প্রম্পটটি ডিলিট করা
+      await promptCollection.deleteOne({ _id: new ObjectId(promptId) });
+    }
+    
+    // রিপোর্টটি 'resolved' করা বা ডিলিট করে দেওয়া
+    await reportCollection.deleteOne({ _id: new ObjectId(reportId) });
+    
+    res.send({ success: true, message: "Action performed successfully" });
+  } catch (error) {
+    res.status(500).send({ message: "Internal Server Error" });
+  }
+});
+
+
+
+
+
+
+
+// প্রম্পট স্ট্যাটাস এবং ফিচার আপডেট (Admin)
+app.patch("/api/admin/update-prompt/:id", async (req, res) => {
+  const id = req.params.id;
+  const { status, rejectionFeedback, isFeatured } = req.body;
+  
+  const updateDoc = { $set: {} };
+  if (status) updateDoc.$set.status = status;
+  if (rejectionFeedback !== undefined) updateDoc.$set.rejectionFeedback = rejectionFeedback;
+  if (isFeatured !== undefined) updateDoc.$set.isFeatured = isFeatured;
+
+  const result = await promptCollection.updateOne({ _id: new ObjectId(id) }, updateDoc);
+  res.send(result);
+});
+
+// সব প্রম্পট দেখার জন্য (Admin)
+app.get("/api/admin/prompts", async (req, res) => {
+  const prompts = await promptCollection.find().sort({ createdAt: -1 }).toArray();
+  res.send(prompts);
+});
+// প্রম্পট ডিলিট করার জন্য (Admin)
+app.delete("/api/admin/delete-prompt/:id", async (req, res) => {
+  const id = req.params.id;
+  try {
+    const query = { _id: new ObjectId(id) };
+    const result = await promptCollection.deleteOne(query);
+    
+    if (result.deletedCount === 1) {
+      res.send({ success: true, message: "Prompt deleted successfully!" });
+    } else {
+      res.status(404).send({ success: false, message: "Prompt not found" });
+    }
+  } catch (error) {
+    console.error("Delete Error:", error);
+    res.status(500).send({ message: "Internal Server Error" });
+  }
+});
+
 
 
 

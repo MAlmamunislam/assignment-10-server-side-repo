@@ -128,6 +128,86 @@ premiumRecordsCollection = database.collection("premium_records");
       }
     });
 
+
+
+
+
+
+
+// for admin route 
+
+
+// ১. সকল ইউজার দেখার জন্য (অ্যাডমিন)
+app.get("/api/users", async (req, res) => {
+  const users = await usersCollection.find().toArray();
+  res.send(users);
+});
+
+// ২. ইউজার রোল পরিবর্তন করার জন্য (অ্যাডমিন)
+app.patch("/api/users/role/:id", async (req, res) => {
+  const id = req.params.id;
+  const { role } = req.body;
+  const filter = { _id: new ObjectId(id) };
+  const updateDoc = { $set: { role: role } };
+  const result = await usersCollection.updateOne(filter, updateDoc);
+  res.send(result);
+});
+
+// ৩. প্রম্পট অ্যাপ্রুভ/রিজেক্ট/ফিচার করার জন্য (অ্যাডমিন)
+app.patch("/api/prompts/status/:id", async (req, res) => {
+  const id = req.params.id;
+  const { status, feedback } = req.body; // status: 'approved'/'rejected', feedback: '...'
+  const filter = { _id: new ObjectId(id) };
+  const updateDoc = { $set: { status: status, feedback: feedback } };
+  const result = await promptCollection.updateOne(filter, updateDoc);
+  res.send(result);
+});
+
+// ৪. অ্যাডমিন অ্যানালিটিক্স (Dashboard)
+app.get("/api/admin/stats", async (req, res) => {
+  const totalUsers = await usersCollection.countDocuments();
+  const totalPrompts = await promptCollection.countDocuments();
+  const totalReviews = await promptCollection.aggregate([
+      { $unwind: "$reviews" },
+      { $count: "total" }
+  ]).toArray();
+  
+  const totalCopies = await promptCollection.aggregate([
+      { $group: { _id: null, sum: { $sum: "$copyCount" } } }
+  ]).toArray();
+
+  res.send({
+      totalUsers,
+      totalPrompts,
+      totalReviews: totalReviews.length > 0 ? totalReviews[0].total : 0,
+      totalCopies: totalCopies.length > 0 ? totalCopies[0].sum : 0
+  });
+});
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     // My Bookmarks API
 
   app.get("/api/bookmarks/my-bookmarks", async (req, res) => {

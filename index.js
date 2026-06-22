@@ -7,8 +7,8 @@ require("dotenv").config();
 
 // app.use(cors());
 const allowedOrigins = [
-  'https://sports-arena-client.vercel.app',
-  'https://assignment-10-server-side-repo.vercel.app'
+  'http://localhost:3000',
+  'https://assignment-10-client-side-repo.vercel.app'
 ];
 
 app.use(cors({

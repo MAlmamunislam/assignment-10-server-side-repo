@@ -310,7 +310,7 @@ app.patch("/api/admin/reports/:reportId", async (req, res) => {
     
     res.send({ success: true, message: "Action performed successfully" });
   } catch (error) {
-    res.status(500).send({ message: "Internal Server Error" });
+    res.status(500).send({ message: "Internal Server Erroor" });
   }
 });
 

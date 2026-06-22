@@ -5,7 +5,24 @@ const cors = require("cors");
 const port = 5000;
 require("dotenv").config();
 
-app.use(cors());
+// app.use(cors());
+const allowedOrigins = [
+  'https://sports-arena-client.vercel.app',
+  'https://assignment-10-server-side-repo.vercel.app'
+];
+
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true
+}));
+
+
 app.use(express.json());
 
 const { MongoClient, ServerApiVersion } = require("mongodb");

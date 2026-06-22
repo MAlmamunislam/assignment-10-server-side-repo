@@ -5,7 +5,7 @@ const cors = require("cors");
 const port = 5000;
 require("dotenv").config();
 
-// app.use(cors();
+// app.use(cors());
 const allowedOrigins = [
   'https://sports-arena-client.vercel.app',
   'https://assignment-10-server-side-repo.vercel.app'
@@ -45,7 +45,7 @@ let promptCollection, itemCollection, orgCollection,premiumRecordsCollection, us
 
 async function run() {
   try {
-    await client.connect();
+    // await client.connect();
 
     const database = client.db("prompt-hub");
     const userDb = client.db("PromptHub"); 
@@ -774,10 +774,10 @@ app.get("/api/users/stats/:userId", async (req, res) => {
       }
     });
 
-    await client.db("admin").command({ ping: 1 });
-    console.log(
-      "Pinged your deployment. You successfully connected to MongoDB!",
-    );
+    // await client.db("admin").command({ ping: 1 });
+    // console.log(
+    //   "Pinged your deployment. You successfully connected to MongoDB!",
+    // );
   } catch (error) {
     console.error("Database connection error:", error);
   }

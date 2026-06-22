@@ -48,7 +48,7 @@ async function run() {
     await client.connect();
 
     const database = client.db("prompt-hub");
-    const userDb = client.db("PromptHub");  // তোমার স্ক্রিনশট অনুযায়ী ডাটাবেজের নাম
+    const userDb = client.db("PromptHub"); 
     promptCollection = database.collection("prompts");
     itemCollection = database.collection("items");
     orgCollection = database.collection("organizations");
@@ -154,13 +154,13 @@ premiumRecordsCollection = database.collection("premium_records");
 // for admin route 
 
 
-// ১. সকল ইউজার দেখার জন্য (অ্যাডমিন)
+// admin get user list
 app.get("/api/users", async (req, res) => {
   const users = await usersCollection.find().toArray();
   res.send(users);
 });
 
-// ২. ইউজার রোল পরিবর্তন করার জন্য (অ্যাডমিন)
+// user can change role
 app.patch("/api/users/role/:id", async (req, res) => {
   const id = req.params.id;
   const { role } = req.body;

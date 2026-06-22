@@ -5,7 +5,7 @@ const cors = require("cors");
 const port = 5000;
 require("dotenv").config();
 
-// app.use(cors());
+// app.use(cors();
 const allowedOrigins = [
   'https://sports-arena-client.vercel.app',
   'https://assignment-10-server-side-repo.vercel.app'
